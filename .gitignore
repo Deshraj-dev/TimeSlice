@@ -27,12 +27,14 @@ DerivedData
 build/
 .idea
 .gradle
+android/.gradle/
 local.properties
 *.iml
 *.hprof
 .cxx/
 *.keystore
 !debug.keystore
+*.jks
 .kotlin/
 
 # node.js
@@ -73,3 +75,12 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Environment variables and credentials
+.env
+.env.*
+service-account*.json
+firebase-adminsdk*.json
+
+# Sensitive local scripts
+run_qa_tests.sh
