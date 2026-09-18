@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.google.gms.google-services"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -92,17 +93,51 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (project.hasProperty('TIMESLICE_UPLOAD_STORE_FILE') && !TIMESLICE_UPLOAD_STORE_FILE.toString().trim().isEmpty()) {
+                def storeFilePath = TIMESLICE_UPLOAD_STORE_FILE.replaceFirst('^~', System.getProperty('user.home'))
+                storeFile file(storeFilePath)
+                storePassword TIMESLICE_UPLOAD_STORE_PASSWORD
+                keyAlias TIMESLICE_UPLOAD_KEY_ALIAS
+                keyPassword TIMESLICE_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def isReleasePackagingTask = taskGraph.allTasks.any {
+        def name = it.name.toLowerCase()
+        name.startsWith("bundlerelease") || name.startsWith("assemblerelease") || name.startsWith("packagerelease")
+    }
+    if (isReleasePackagingTask) {
+        def requiredProps = [
+            'TIMESLICE_UPLOAD_STORE_FILE',
+            'TIMESLICE_UPLOAD_STORE_PASSWORD',
+            'TIMESLICE_UPLOAD_KEY_ALIAS',
+            'TIMESLICE_UPLOAD_KEY_PASSWORD'
+        ]
+        def missingProps = requiredProps.findAll { !project.hasProperty(it) || project.property(it).toString().trim().isEmpty() }
+        if (!missingProps.isEmpty()) {
+            throw new GradleException(
+                "Release build failed: Missing required signing properties in ~/.gradle/gradle.properties:\n" +
+                missingProps.collect { "  - " + it }.join("\n") +
+                "\nPlease configure these properties in your local ~/.gradle/gradle.properties file."
+            )
+        }
+        def storeFilePath = TIMESLICE_UPLOAD_STORE_FILE.replaceFirst('^~', System.getProperty('user.home'))
+        if (!file(storeFilePath).exists()) {
+            throw new GradleException("Release build failed: Keystore file not found at: " + storeFilePath)
         }
     }
 }

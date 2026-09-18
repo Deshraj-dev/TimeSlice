@@ -14,7 +14,7 @@ import {
 import { ScaledSheet } from 'react-native-size-matters';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { collection, query, where, onSnapshot, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, getDoc, updateDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { getTodayDateString, getYesterdayDateString } from '../utils/dateHelpers';
 import notificationService from '../services/notificationService';
@@ -369,17 +369,9 @@ export default function FocusScreen({ navigation }) {
 
     return (
         <View style={styles.container}>
-            {/* Top Back Header */}
+            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    activeOpacity={0.8}
-                    onPress={() => navigation.goBack()}
-                >
-                    <AppIcon name="arrow-left" size={18} color="#FFFFFF" strokeWidth={2.4} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Focus Session</Text>
-                <View style={styles.headerPlaceholder} />
+                <Text style={styles.headerTitle}>Focus</Text>
             </View>
 
             <ScrollView
@@ -708,7 +700,7 @@ const styles = ScaledSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         paddingHorizontal: '16@ms',
         paddingTop: Platform.OS === 'ios' ? 50 : (StatusBar.currentHeight ? StatusBar.currentHeight + 8 : 22),
         paddingBottom: '12@ms',
@@ -716,26 +708,10 @@ const styles = ScaledSheet.create({
         borderColor: '#171C26',
         backgroundColor: '#0B0E14',
     },
-    backButton: {
-        paddingVertical: '6@ms',
-        paddingHorizontal: '12@ms',
-        borderRadius: 999,
-        backgroundColor: '#141722',
-        borderWidth: 1,
-        borderColor: '#1F2536',
-    },
-    backButtonText: {
-        color: '#06B6D4',
-        fontSize: '11@ms',
-        fontWeight: '700',
-    },
     headerTitle: {
         color: '#FFFFFF',
         fontSize: '16@ms',
         fontWeight: '800',
-    },
-    headerPlaceholder: {
-        width: '80@s',
     },
     scrollContent: {
         paddingHorizontal: '16@ms',

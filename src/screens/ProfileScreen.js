@@ -14,17 +14,22 @@ import {
     PermissionsAndroid,
     Dimensions,
     StatusBar,
+    Modal,
 } from 'react-native';
 import { COLORS } from '../theme/colors';
 import Card from '../components/Card';
 import AppButton from '../components/AppButton';
 import SectionHeader from '../components/SectionHeader';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { sendPasswordResetEmail, signOut } from 'firebase/auth';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import AppIcon from '../components/AppIcon';
+import { doc, getDoc, updateDoc } from '@react-native-firebase/firestore';
+import { sendPasswordResetEmail, signOut } from '@react-native-firebase/auth';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import app, { auth, db } from '../services/firebase';
+import { auth, db } from '../services/firebase';
 import notificationService from '../services/notificationService';
+import {
+    deleteCurrentUserAccount,
+    completeAuthDeletionWithPassword,
+} from '../services/accountDeletionService';
 
 const { width: screenWidth } = Dimensions.get('window');
 const AVATAR_SIZE = 84;
@@ -43,6 +48,10 @@ export default function ProfileScreen({ navigation }) {
     const [saving, setSaving] = useState(false);
     const [avatarUri, setAvatarUri] = useState(null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [deleteStage, setDeleteStage] = useState('confirm'); // 'confirm' | 'reauth' | 'deleting'
+    const [reauthPassword, setReauthPassword] = useState('');
+    const [deleteError, setDeleteError] = useState('');
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -204,24 +213,6 @@ export default function ProfileScreen({ navigation }) {
 
         setUploadingAvatar(true);
         try {
-            const storage = getStorage(app);
-            const avatarRef = ref(storage, `avatars/${user.uid}.jpg`);
-            const res = await fetch(asset.uri);
-            const blob = await res.blob();
-            await uploadBytes(avatarRef, blob);
-            const downloadURL = await getDownloadURL(avatarRef);
-
-            const userDocRef = doc(db, 'users', user.uid);
-            await updateDoc(userDocRef, {
-                photoURL: downloadURL,
-                avatarBase64: null,
-            });
-
-            setAvatarUri(downloadURL);
-            Alert.alert('Success', 'Profile picture updated successfully.');
-        } catch (err) {
-            console.log('Storage upload failed, falling back to Base64 Firestore storage.', err);
-
             if (asset.base64) {
                 const base64Data = `data:${asset.type};base64,${asset.base64}`;
                 const userDocRef = doc(db, 'users', user.uid);
@@ -234,6 +225,9 @@ export default function ProfileScreen({ navigation }) {
             } else {
                 Alert.alert('Upload Error', 'Failed to retrieve image data.');
             }
+        } catch (err) {
+            console.log('Error saving avatar to Firestore:', err);
+            Alert.alert('Upload Error', 'Failed to save profile picture.');
         } finally {
             setUploadingAvatar(false);
         }
@@ -259,6 +253,103 @@ export default function ProfileScreen({ navigation }) {
         }
     };
 
+    const handlePrivacyPolicyPress = () => {
+        Alert.alert(
+            'Privacy & Data Policy',
+            'TimeSlice values your privacy. All your profile information, scheduled activities, and focus history are stored securely and remain private to you.\n\nWhen you delete your account, all personal records, activities, and focus sessions are immediately and permanently removed from our servers.\n\nAccount deletion is irreversible. If you uninstalled the application and need to request deletion of your account and associated data, contact TimeSlice support at deshrajstack@gmail.com.',
+            [{ text: 'Close', style: 'default' }]
+        );
+    };
+
+    const openDeleteModal = () => {
+        setDeleteStage('confirm');
+        setReauthPassword('');
+        setDeleteError('');
+        setDeleteModalVisible(true);
+    };
+
+    const closeDeleteModal = () => {
+        if (deleteStage === 'deleting') return;
+        setDeleteModalVisible(false);
+        setDeleteStage('confirm');
+        setReauthPassword('');
+        setDeleteError('');
+    };
+
+    const handleInitialDelete = async () => {
+        setDeleteStage('deleting');
+        setDeleteError('');
+
+        try {
+            const res = await deleteCurrentUserAccount();
+
+            if (res.success) {
+                setDeleteModalVisible(false);
+                return;
+            }
+
+            if (res.stage === 'requires-recent-login') {
+                setDeleteStage('reauth');
+                setDeleteError('Recent authentication required. Please enter your password to complete deletion.');
+                return;
+            }
+
+            if (res.stage === 'firestore') {
+                setDeleteStage('confirm');
+                Alert.alert(
+                    'Deletion Failed',
+                    'Failed to delete account data from the server. Your account remains intact. Please check your network connection and try again.'
+                );
+                return;
+            }
+
+            setDeleteStage('confirm');
+            Alert.alert(
+                'Deletion Incomplete',
+                'Your data was removed, but removing your login credentials could not be completed. Please try again.'
+            );
+        } catch (err) {
+            setDeleteStage('confirm');
+            Alert.alert('Error', 'An unexpected error occurred during account deletion.');
+        }
+    };
+
+    const handleConfirmReauthDelete = async () => {
+        if (!reauthPassword.trim()) {
+            setDeleteError('Please enter your password to continue.');
+            return;
+        }
+
+        const passToVerify = reauthPassword;
+        setDeleteStage('deleting');
+        setDeleteError('');
+
+        try {
+            const res = await completeAuthDeletionWithPassword({ password: passToVerify });
+
+            if (res.success) {
+                setDeleteModalVisible(false);
+                setReauthPassword('');
+                return;
+            }
+
+            if (res.stage === 'reauth') {
+                setDeleteStage('reauth');
+                setDeleteError('Incorrect password. Please verify your password and try again.');
+                setReauthPassword('');
+                return;
+            }
+
+            setDeleteStage('reauth');
+            setDeleteError('Failed to complete account deletion. Please try again.');
+            setReauthPassword('');
+        } catch (err) {
+            setDeleteStage('reauth');
+            setDeleteError('An unexpected error occurred during re-authentication.');
+            setReauthPassword('');
+        }
+    };
+
     const userInitial = displayName
         ? displayName.charAt(0).toUpperCase()
         : email
@@ -278,11 +369,7 @@ export default function ProfileScreen({ navigation }) {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backButtonText}>← Back</Text>
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Profile Settings</Text>
-                <View style={styles.headerPlaceholder} />
+                <Text style={styles.headerTitle}>Profile</Text>
             </View>
 
             <ScrollView
@@ -474,7 +561,7 @@ export default function ProfileScreen({ navigation }) {
                     style={styles.saveButton}
                 />
 
-                <SectionHeader title="Account Operations" />
+                <SectionHeader title="Account & Privacy" />
                 <Card style={styles.card}>
                     <TouchableOpacity
                         style={styles.actionRowButton}
@@ -485,16 +572,129 @@ export default function ProfileScreen({ navigation }) {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[styles.actionRowButton, styles.lastActionRowButton]}
+                        style={styles.actionRowButton}
+                        onPress={handlePrivacyPolicyPress}
+                    >
+                        <Text style={styles.actionRowButtonText}>Privacy & Data Policy</Text>
+                        <Text style={styles.actionRowArrow}>→</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.actionRowButton}
                         onPress={handleLogout}
                     >
-                        <Text style={[styles.actionRowButtonText, styles.dangerText]}>
-                            Logout Account
-                        </Text>
+                        <Text style={styles.actionRowButtonText}>Logout Account</Text>
+                        <Text style={styles.actionRowArrow}>→</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.actionRowButton, styles.lastActionRowButton]}
+                        onPress={openDeleteModal}
+                    >
+                        <View style={styles.deleteRowContent}>
+                            <AppIcon name="trash" size={16} color={COLORS.danger} />
+                            <Text style={[styles.actionRowButtonText, styles.dangerText, styles.deleteRowText]}>
+                                Delete Account
+                            </Text>
+                        </View>
                         <Text style={[styles.actionRowArrow, styles.dangerText]}>→</Text>
                     </TouchableOpacity>
                 </Card>
             </ScrollView>
+
+            <Modal
+                visible={deleteModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={closeDeleteModal}
+            >
+                <View style={styles.deleteModalOverlay}>
+                    <View style={styles.deleteModalContainer}>
+                        {deleteStage === 'deleting' ? (
+                            <View style={styles.deletingStateContainer}>
+                                <ActivityIndicator size="large" color={COLORS.danger} />
+                                <Text style={styles.deleteModalTitle}>Deleting Account...</Text>
+                                <Text style={styles.deleteModalDescription}>
+                                    Permanently removing your account and associated data from our servers. Please wait...
+                                </Text>
+                            </View>
+                        ) : deleteStage === 'reauth' ? (
+                            <View>
+                                <View style={styles.deleteModalHeader}>
+                                    <View style={styles.deleteIconBadge}>
+                                        <AppIcon name="trash" size={24} color={COLORS.danger} />
+                                    </View>
+                                    <Text style={styles.deleteModalTitle}>Confirm Password</Text>
+                                    <Text style={styles.deleteModalDescription}>
+                                        For security, please enter your current password to authorize permanent account deletion.
+                                    </Text>
+                                </View>
+
+                                {deleteError ? (
+                                    <Text style={styles.deleteErrorMessage}>{deleteError}</Text>
+                                ) : null}
+
+                                <TextInput
+                                    style={styles.deletePasswordInput}
+                                    placeholder="Enter your password"
+                                    placeholderTextColor={COLORS.textMuted}
+                                    secureTextEntry={true}
+                                    value={reauthPassword}
+                                    onChangeText={setReauthPassword}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                />
+
+                                <View style={styles.deleteModalButtonRow}>
+                                    <TouchableOpacity
+                                        style={styles.deleteCancelButton}
+                                        onPress={closeDeleteModal}
+                                    >
+                                        <Text style={styles.deleteCancelButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.deleteConfirmButton}
+                                        onPress={handleConfirmReauthDelete}
+                                    >
+                                        <Text style={styles.deleteConfirmButtonText}>Confirm & Delete</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            <View>
+                                <View style={styles.deleteModalHeader}>
+                                    <View style={styles.deleteIconBadge}>
+                                        <AppIcon name="trash" size={24} color={COLORS.danger} />
+                                    </View>
+                                    <Text style={styles.deleteModalTitle}>Delete Account?</Text>
+                                    <Text style={styles.deleteModalDescription}>
+                                        This action is permanent and cannot be undone. All your activities, focus sessions, and profile data will be permanently erased.
+                                    </Text>
+                                </View>
+
+                                {deleteError ? (
+                                    <Text style={styles.deleteErrorMessage}>{deleteError}</Text>
+                                ) : null}
+
+                                <View style={styles.deleteModalButtonRow}>
+                                    <TouchableOpacity
+                                        style={styles.deleteCancelButton}
+                                        onPress={closeDeleteModal}
+                                    >
+                                        <Text style={styles.deleteCancelButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.deleteConfirmButton}
+                                        onPress={handleInitialDelete}
+                                    >
+                                        <Text style={styles.deleteConfirmButtonText}>Delete My Account</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -513,7 +713,7 @@ const styles = ScaledSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         paddingHorizontal: '16@ms',
         paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 30),
         paddingBottom: '16@ms',
@@ -521,26 +721,10 @@ const styles = ScaledSheet.create({
         borderColor: COLORS.border,
         backgroundColor: COLORS.background,
     },
-    backButton: {
-        paddingVertical: '6@ms',
-        paddingHorizontal: '12@ms',
-        borderRadius: '8@ms',
-        backgroundColor: COLORS.card,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    backButtonText: {
-        color: COLORS.primary,
-        fontSize: '13@ms',
-        fontWeight: '700',
-    },
     headerTitle: {
         color: COLORS.text,
         fontSize: '17@ms',
         fontWeight: '800',
-    },
-    headerPlaceholder: {
-        width: '65@s',
     },
     scrollContent: {
         paddingHorizontal: '20@ms',
@@ -877,5 +1061,108 @@ const styles = ScaledSheet.create({
         marginTop: '3@ms',
         textAlign: 'center',
         lineHeight: 11,
+    },
+    deleteRowContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: '8@ms',
+    },
+    deleteRowText: {
+        marginLeft: '4@ms',
+    },
+    deleteModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '24@ms',
+    },
+    deleteModalContainer: {
+        backgroundColor: COLORS.card,
+        borderRadius: '18@ms',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        padding: '22@ms',
+        width: '100%',
+        maxWidth: 400,
+    },
+    deleteModalHeader: {
+        alignItems: 'center',
+        marginBottom: '16@ms',
+    },
+    deleteIconBadge: {
+        width: '48@ms',
+        height: '48@ms',
+        borderRadius: '24@ms',
+        backgroundColor: 'rgba(239, 68, 68, 0.12)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: '12@ms',
+    },
+    deleteModalTitle: {
+        color: COLORS.text,
+        fontSize: '18@ms',
+        fontWeight: '800',
+        textAlign: 'center',
+        marginBottom: '8@ms',
+    },
+    deleteModalDescription: {
+        color: COLORS.textSecondary,
+        fontSize: '13@ms',
+        textAlign: 'center',
+        lineHeight: 18,
+    },
+    deleteErrorMessage: {
+        color: COLORS.danger,
+        fontSize: '12@ms',
+        textAlign: 'center',
+        marginBottom: '12@ms',
+        paddingHorizontal: '8@ms',
+    },
+    deletePasswordInput: {
+        backgroundColor: COLORS.cardElevated,
+        borderRadius: '12@ms',
+        padding: '14@ms',
+        color: COLORS.text,
+        fontSize: '14@ms',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        marginBottom: '16@ms',
+    },
+    deleteModalButtonRow: {
+        flexDirection: 'row',
+        gap: '12@ms',
+        marginTop: '6@ms',
+    },
+    deleteCancelButton: {
+        flex: 1,
+        paddingVertical: '13@ms',
+        borderRadius: '12@ms',
+        backgroundColor: COLORS.cardElevated,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    deleteCancelButtonText: {
+        color: COLORS.textSecondary,
+        fontSize: '14@ms',
+        fontWeight: '700',
+    },
+    deleteConfirmButton: {
+        flex: 1.2,
+        paddingVertical: '13@ms',
+        borderRadius: '12@ms',
+        backgroundColor: COLORS.danger,
+        alignItems: 'center',
+    },
+    deleteConfirmButtonText: {
+        color: '#FFFFFF',
+        fontSize: '14@ms',
+        fontWeight: '800',
+    },
+    deletingStateContainer: {
+        alignItems: 'center',
+        paddingVertical: '20@ms',
+        gap: '12@ms',
     },
 });

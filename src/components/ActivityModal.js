@@ -12,7 +12,7 @@ import {
     Platform,
 } from 'react-native';
 import { COLORS } from '../theme/colors';
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { checkTimeOverlap, parseTimeToMinutes } from '../utils/dateHelpers';
 import notificationService from '../services/notificationService';

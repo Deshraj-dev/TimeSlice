@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account and Data Deletion - TimeSlice</title>
+    <style>
+        :root {
+            --bg: #0F172A;
+            --card-bg: #1E293B;
+            --card-border: #334155;
+            --text-main: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            --primary: #38BDF8;
+            --primary-hover: #0EA5E9;
+            --danger: #EF4444;
+            --danger-hover: #DC2626;
+            --accent: #818CF8;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.65;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 820px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 40px 36px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        header {
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 24px;
+            margin-bottom: 32px;
+        }
+        .badge {
+            display: inline-block;
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+        }
+        h1 {
+            font-size: 30px;
+            font-weight: 800;
+            color: #FFFFFF;
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+        }
+        .meta {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-top: 32px;
+            margin-bottom: 14px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+        }
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #FFFFFF;
+            margin-top: 18px;
+            margin-bottom: 8px;
+        }
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+            font-size: 15px;
+        }
+        ul, ol {
+            margin: 10px 0 16px 22px;
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        strong {
+            color: #FFFFFF;
+        }
+        a {
+            color: var(--primary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        a:hover {
+            color: var(--primary-hover);
+            text-decoration: underline;
+        }
+        .warning-card {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .warning-card h3 {
+            color: var(--danger);
+            margin-top: 0;
+            margin-bottom: 8px;
+        }
+        .warning-card p {
+            margin-bottom: 0;
+            color: #FECACA;
+        }
+        .method-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 20px 0;
+        }
+        .method-card h3 {
+            margin-top: 0;
+            color: #FFFFFF;
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+        .btn-danger {
+            display: inline-block;
+            background: var(--danger);
+            color: #FFFFFF;
+            font-weight: 700;
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-top: 12px;
+            text-decoration: none;
+            transition: background-color 0.2s;
+        }
+        .btn-danger:hover {
+            background: var(--danger-hover);
+            text-decoration: none;
+        }
+        code {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: var(--primary);
+        }
+        .code-block {
+            background: #0B1120;
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 14px 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            color: #E2E8F0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--card-border);
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <span class="badge">Account & Data Management</span>
+            <h1>TimeSlice Account and Data Deletion</h1>
+            <div class="meta">
+                <span><strong>Application:</strong> TimeSlice</span> &bull; 
+                <span><strong>Developer:</strong> Deshraj</span> &bull; 
+                <span><strong>Effective Date:</strong> September 17, 2026</span> &bull;
+                <span><strong>Last Updated:</strong> September 17, 2026</span>
+            </div>
+        </header>
+
+        <p>In accordance with Google Play developer policies and global data privacy standards, TimeSlice provides complete, transparent account and data deletion capabilities. You can delete your account and all associated personal and productivity data at any time.</p>
+
+        <div class="warning-card">
+            <h3>Permanent Action Notice</h3>
+            <p>Account deletion is immediate, permanent, and irreversible. Once executed, all your scheduled activities, focus history, and profile records are completely erased from our active databases and cannot be recovered.</p>
+        </div>
+
+        <h2>1. Data Deleted Upon Account Deletion</h2>
+        <p>When you delete your account, the following categories of data are permanently deleted from our active database servers:</p>
+        <ul>
+            <li><strong>Account Identity:</strong> Your registered email address, authentication credentials, and Google Firebase Authentication UID.</li>
+            <li><strong>User Profile:</strong> Your display name, account configuration, and Base64 avatar image (<code>users/{userId}.avatarBase64</code>). *(Note: TimeSlice does not use or provision Firebase Cloud Storage; all avatar data is stored directly in your user document and deleted with it)*.</li>
+            <li><strong>Productivity Data:</strong> All scheduled activities, task names, categories, dates, start/end times, and completion states (<code>users/{userId}/activities</code>).</li>
+            <li><strong>Focus History:</strong> All recorded focus sessions, durations, timestamps, and timer mode history (<code>users/{userId}/focusSessions</code>).</li>
+            <li><strong>Notification Tokens & Settings:</strong> Your Firebase Cloud Messaging (FCM) device registration token and notification preferences.</li>
+            <li><strong>Device Local Cache:</strong> Local focus session state (<code>focus_session_state</code>) on your device is cleared if deleted via the app.</li>
+        </ul>
+
+        <h2>2. Retention & Backup Policy</h2>
+        <ul>
+            <li><strong>Application-Level Deletion:</strong> Deletion from TimeSlice active databases is immediate upon execution. TimeSlice maintains no application-level shadow profiles, recovery archives, or separate retention databases.</li>
+            <li><strong>Third-Party Infrastructure Retention & Backups:</strong> Routine disaster-recovery backups, snapshots, or system logs maintained by Google Cloud / Firebase may retain residual copies of deleted data for a temporary period in accordance with Google's standard cloud data retention and disposal schedules (typically up to 30 to 60 days before hardware-level overwriting). This infrastructure retention is governed directly by Google Cloud's data processing terms, over which TimeSlice has no direct operational control.</li>
+            <li><strong>Local Storage:</strong> If you delete your account externally via email without opening the app, uninstalling the app from your device will clear any residual local device cache.</li>
+        </ul>
+
+        <h2>3. How to Delete Your Account</h2>
+
+        <div class="method-card">
+            <h3>Option A: In-App Self-Service Deletion (Immediate & Automated)</h3>
+            <p>If you have the TimeSlice app installed on your device:</p>
+            <ol>
+                <li>Open <strong>TimeSlice</strong>.</li>
+                <li>Tap the <strong>Profile</strong> icon in the bottom navigation bar.</li>
+                <li>Scroll to the <strong>Account & Privacy</strong> section at the bottom.</li>
+                <li>Tap <strong>Delete Account</strong>.</li>
+                <li>Review the permanent deletion notice and tap <strong>Delete My Account</strong>.</li>
+                <li>If prompted, enter your current password to verify identity and tap <strong>Confirm & Delete</strong>.</li>
+            </ol>
+            <p>Your account and all associated records are permanently erased immediately.</p>
+        </div>
+
+        <div class="method-card">
+            <h3>Option B: External Deletion Request (Without Needing the App)</h3>
+            <p>If you uninstalled the TimeSlice app, lost your device, or cannot log in, you can request manual deletion via email:</p>
+            <ol>
+                <li>Compose an email to: <a href="mailto:deshrajstack@gmail.com">deshrajstack@gmail.com</a></li>
+                <li>Set the subject line to: <code>TimeSlice Account Deletion Request</code></li>
+                <li><strong>Send from your registered email address:</strong> To verify account ownership, your request must be sent from the email registered with your TimeSlice account.</li>
+                <li>Include the following message in the body:</li>
+            </ol>
+            <div class="code-block">Please permanently delete my TimeSlice account and all associated data.
+Registered Email: [your registered email address]</div>
+            
+            <a class="btn-danger" href="mailto:deshrajstack@gmail.com?subject=TimeSlice%20Account%20Deletion%20Request&body=Please%20permanently%20delete%20my%20TimeSlice%20account%20and%20all%20associated%20data.%0A%0ARegistered%20Email:%20">Click Here to Request Deletion by Email</a>
+
+            <p style="margin-top: 18px;"><strong>Processing Procedure & Timeline:</strong></p>
+            <ul>
+                <li><strong>Manual Review:</strong> Email deletion requests are reviewed and processed manually by the developer (they are not processed automatically by the mobile application).</li>
+                <li><strong>Timeline:</strong> Verified requests are manually executed within <strong>30 days</strong> (typically within 48 to 72 hours).</li>
+                <li><strong>Confirmation:</strong> You will receive a written confirmation email once your account and all associated records have been permanently erased.</li>
+            </ul>
+        </div>
+
+        <h2>4. Support & Contact</h2>
+        <p>If you have questions regarding this deletion policy, please contact:</p>
+        <p>
+            <strong>Developer:</strong> Deshraj<br>
+            <strong>Email:</strong> <a href="mailto:deshrajstack@gmail.com">deshrajstack@gmail.com</a><br>
+            <strong>Privacy Policy:</strong> <a href="privacy-policy.html">TimeSlice Privacy Policy</a>
+        </p>
+
+        <footer>
+            &copy; 2026 TimeSlice. All rights reserved.
+        </footer>
+    </div>
+</body>
+</html>

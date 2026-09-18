@@ -3,7 +3,7 @@ import { View, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged } from '@react-native-firebase/auth';
 import { auth } from '../services/firebase';
 import { ScaledSheet, moderateScale, verticalScale } from 'react-native-size-matters';
 

@@ -4,7 +4,6 @@ import {
     View,
     Text,
     ScrollView,
-    TouchableOpacity,
     ActivityIndicator,
     Dimensions,
     StatusBar,
@@ -23,7 +22,7 @@ import Svg, {
     Stop,
     Text as SvgText,
 } from 'react-native-svg';
-import { collection, query, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc } from '@react-native-firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { getTodayDateString, getYesterdayDateString } from '../utils/dateHelpers';
 
@@ -230,16 +229,7 @@ export default function AnalyticsScreen({ navigation }) {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity
-                    onPress={() => navigation.goBack()}
-                    style={styles.backButton}
-                    activeOpacity={0.8}
-                >
-                    <AppIcon name="arrow-left" size={moderateScale(14)} color={COLORS.primary} strokeWidth={2.4} />
-                    <Text style={styles.backButtonText}>Dashboard</Text>
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Productivity Analytics</Text>
-                <View style={styles.headerSpacer} />
+                <Text style={styles.headerTitle}>Stats</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -482,36 +472,17 @@ const styles = ScaledSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         paddingHorizontal: '16@ms',
         paddingTop: Platform.OS === 'ios' ? 56 : (StatusBar.currentHeight ? StatusBar.currentHeight + 12 : 28),
         paddingBottom: '16@ms',
         backgroundColor: '#0B0E14',
-    },
-    backButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#11141E',
-        paddingHorizontal: '12@ms',
-        paddingVertical: '8@ms',
-        borderRadius: '20@ms',
-        borderWidth: 1,
-        borderColor: '#232936',
-        gap: '6@ms',
-    },
-    backButtonText: {
-        color: COLORS.primary,
-        fontSize: '12@ms',
-        fontWeight: '700',
     },
     headerTitle: {
         color: COLORS.text,
         fontSize: '18@ms',
         fontWeight: '800',
         letterSpacing: 0.3,
-    },
-    headerSpacer: {
-        width: '60@ms',
     },
     scrollContent: {
         padding: '20@ms',

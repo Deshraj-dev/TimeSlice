@@ -15,7 +15,7 @@ import CustomInput from '../components/CustomInput';
 import AppButton from '../components/AppButton';
 import Card from '../components/Card';
 import AppIcon from '../components/AppIcon';
-import { signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from '@react-native-firebase/auth';
 import { auth } from '../services/firebase';
 
 const getFriendlyErrorMessage = (code, defaultMsg) => {

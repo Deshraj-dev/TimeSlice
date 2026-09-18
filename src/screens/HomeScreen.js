@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { ScaledSheet, moderateScale } from 'react-native-size-matters';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc } from '@react-native-firebase/firestore';
 import { auth, db } from '../services/firebase';
 import ActivityModal from '../components/ActivityModal';
 import SectionHeader from '../components/SectionHeader';
@@ -148,7 +148,7 @@ export default function HomeScreen({ navigation }) {
         const handleError = async (error) => {
             if (!isMounted) return;
 
-            if (error?.code === 'permission-denied' && auth.currentUser && !hasRetried) {
+            if ((error?.code === 'permission-denied' || error?.code === 'firestore/permission-denied') && auth.currentUser && !hasRetried) {
                 hasRetried = true;
                 try {
                     await auth.currentUser.getIdToken(true);

@@ -14,8 +14,8 @@ import { ScaledSheet, moderateScale } from 'react-native-size-matters';
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
-} from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+} from '@react-native-firebase/auth';
+import { doc, setDoc } from '@react-native-firebase/firestore';
 import { auth, db } from '../services/firebase';
 import CustomInput from '../components/CustomInput';
 import AppButton from '../components/AppButton';

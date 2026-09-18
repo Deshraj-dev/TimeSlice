@@ -1,5 +1,5 @@
 import { ScaledSheet, moderateScale } from 'react-native-size-matters';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { COLORS } from '../theme/colors';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from '@react-native-firebase/firestore';
 import { auth, db } from '../services/firebase';
 import ActivityModal from '../components/ActivityModal';
 import Card from '../components/Card';
@@ -53,6 +53,79 @@ const CATEGORY_MAP = {
     other: { label: 'Other', icon: 'other', color: '#64748B' },
 };
 
+const HOUR_HEIGHT = moderateScale(64);
+const TIME_COL_WIDTH = moderateScale(54);
+const DAY_COL_WIDTH = moderateScale(96);
+const TOTAL_HOURS = 24;
+const DEFAULT_START_HOUR = 7;
+
+export const layoutDayActivities = (activities) => {
+    if (!activities || activities.length === 0) return [];
+
+    const sorted = [...activities].sort((a, b) => {
+        const startDiff = parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime);
+        if (startDiff !== 0) return startDiff;
+        const durA = parseTimeToMinutes(a.endTime) - parseTimeToMinutes(a.startTime);
+        const durB = parseTimeToMinutes(b.endTime) - parseTimeToMinutes(b.startTime);
+        return durB - durA;
+    });
+
+    const clusters = [];
+    let currentCluster = [];
+    let clusterEnd = -1;
+
+    sorted.forEach((act) => {
+        const start = parseTimeToMinutes(act.startTime);
+        const end = Math.max(start + 15, parseTimeToMinutes(act.endTime));
+
+        if (currentCluster.length === 0) {
+            currentCluster.push(act);
+            clusterEnd = end;
+        } else if (start < clusterEnd) {
+            currentCluster.push(act);
+            clusterEnd = Math.max(clusterEnd, end);
+        } else {
+            clusters.push(currentCluster);
+            currentCluster = [act];
+            clusterEnd = end;
+        }
+    });
+    if (currentCluster.length > 0) {
+        clusters.push(currentCluster);
+    }
+
+    const result = [];
+    clusters.forEach((cluster) => {
+        const columns = [];
+        const items = [];
+
+        cluster.forEach((act) => {
+            const start = parseTimeToMinutes(act.startTime);
+            const end = Math.max(start + 15, parseTimeToMinutes(act.endTime));
+
+            let colIndex = columns.findIndex((colEnd) => colEnd <= start);
+            if (colIndex === -1) {
+                colIndex = columns.length;
+                columns.push(end);
+            } else {
+                columns[colIndex] = end;
+            }
+
+            items.push({ act, colIndex });
+        });
+
+        const totalCols = columns.length;
+        items.forEach((item) => {
+            result.push({
+                ...item,
+                numCols: totalCols,
+            });
+        });
+    });
+
+    return result;
+};
+
 export default function CalendarScreen({ navigation }) {
     const todayStr = getTodayDateString();
     const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -67,25 +140,34 @@ export default function CalendarScreen({ navigation }) {
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [editingActivity, setEditingActivity] = useState(null);
 
-    // Fetch activities for the viewed month
+    const headerScrollRef = useRef(null);
+    const gridScrollRef = useRef(null);
+    const dayScrollRef = useRef(null);
+    const weekVerticalScrollRef = useRef(null);
+
+    // Fetch activities for the viewed month with 7-day boundary buffer for week views
     useEffect(() => {
         const user = auth.currentUser;
         if (!user) return;
 
-        const padMonth = String(viewedMonth + 1).padStart(2, '0');
-        const startStr = `${viewedYear}-${padMonth}-01`;
+        const firstDay = new Date(viewedYear, viewedMonth, 1);
+        firstDay.setDate(firstDay.getDate() - 7);
+        const y1 = firstDay.getFullYear();
+        const m1 = String(firstDay.getMonth() + 1).padStart(2, '0');
+        const d1 = String(firstDay.getDate()).padStart(2, '0');
+        const startStr = `${y1}-${m1}-${d1}`;
 
-        let endStr;
-        if (viewedMonth === 11) {
-            endStr = `${viewedYear + 1}-01-01`;
-        } else {
-            endStr = `${viewedYear}-${String(viewedMonth + 2).padStart(2, '0')}-01`;
-        }
+        const lastDay = new Date(viewedYear, viewedMonth + 1, 0);
+        lastDay.setDate(lastDay.getDate() + 7);
+        const y2 = lastDay.getFullYear();
+        const m2 = String(lastDay.getMonth() + 1).padStart(2, '0');
+        const d2 = String(lastDay.getDate()).padStart(2, '0');
+        const endStr = `${y2}-${m2}-${d2}`;
 
         const q = query(
             collection(db, 'users', user.uid, 'activities'),
             where('date', '>=', startStr),
-            where('date', '<', endStr)
+            where('date', '<=', endStr)
         );
 
         const unsubscribe = onSnapshot(
@@ -122,6 +204,30 @@ export default function CalendarScreen({ navigation }) {
 
         return unsubscribe;
     }, [viewedYear, viewedMonth]);
+
+    const handleSelectDate = (dateStr) => {
+        setSelectedDate(dateStr);
+        if (dateStr && dateStr.includes('-')) {
+            const [y, m] = dateStr.split('-').map(Number);
+            if (y !== viewedYear || m - 1 !== viewedMonth) {
+                setViewedYear(y);
+                setViewedMonth(m - 1);
+            }
+        }
+    };
+
+    // Auto-scroll to selected day column in Week view
+    useEffect(() => {
+        if (viewMode === 'Week' && gridScrollRef.current) {
+            const weekDays = getWeekDates(selectedDate);
+            const dayIndex = weekDays.findIndex((d) => d.dateStr === selectedDate);
+            if (dayIndex >= 0) {
+                const targetX = Math.max(0, dayIndex * DAY_COL_WIDTH - DAY_COL_WIDTH);
+                gridScrollRef.current.scrollTo({ x: targetX, animated: false });
+                headerScrollRef.current?.scrollTo({ x: targetX, animated: false });
+            }
+        }
+    }, [selectedDate, viewMode]);
 
     const prevMonth = () => {
         setViewedMonth((prev) => {
@@ -168,6 +274,8 @@ export default function CalendarScreen({ navigation }) {
 
     const calendarDays = generateCalendarDays();
     const activeDateActivities = monthActivities[selectedDate] || [];
+
+    const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => i);
 
     const renderMonthView = () => {
         return (
@@ -242,7 +350,7 @@ export default function CalendarScreen({ navigation }) {
                                         isSelected && styles.dayCellSelected,
                                         isToday && !isSelected && styles.dayCellToday,
                                     ]}
-                                    onPress={() => setSelectedDate(item.dateStr)}
+                                    onPress={() => handleSelectDate(item.dateStr)}
                                 >
                                     <Text
                                         style={[
@@ -341,40 +449,62 @@ export default function CalendarScreen({ navigation }) {
 
     const renderWeekView = () => {
         const weekDays = getWeekDates(selectedDate);
-        const hours = Array.from({ length: 15 }, (_, i) => i + 7); // 07:00 to 21:00
 
         return (
             <View style={styles.weekViewContainer}>
-                <View style={styles.weekHeaderRow}>
-                    {weekDays.map((day) => {
-                        const isSel = day.dateStr === selectedDate;
-                        const isToday = day.dateStr === todayStr;
-                        return (
-                            <TouchableOpacity
-                                key={day.dateStr}
-                                style={[
-                                    styles.weekHeaderCell,
-                                    isSel && styles.weekHeaderCellSelected,
-                                    isToday && !isSel && styles.weekHeaderCellToday,
-                                ]}
-                                onPress={() => setSelectedDate(day.dateStr)}
-                            >
-                                <Text style={[styles.weekDayName, isSel && styles.weekDayNameSelected]}>
-                                    {day.dayName.substring(0, 3)}
-                                </Text>
-                                <Text style={[styles.weekDayNum, isSel && styles.weekDayNumSelected]}>
-                                    {day.dayNum}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
+                {/* Fixed Top Day Header Row synchronized with horizontal grid scroll */}
+                <View style={styles.weekHeaderContainer}>
+                    <View style={[styles.weekTimeHeaderCorner, { width: TIME_COL_WIDTH }]}>
+                        <AppIcon name="clock" size={moderateScale(14)} color={COLORS.textMuted} strokeWidth={2} />
+                    </View>
+
+                    <ScrollView
+                        ref={headerScrollRef}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        scrollEnabled={false}
+                    >
+                        <View style={styles.weekHeaderTrack}>
+                            {weekDays.map((day) => {
+                                const isSel = day.dateStr === selectedDate;
+                                const isToday = day.dateStr === todayStr;
+                                return (
+                                    <View key={day.dateStr} style={[styles.weekHeaderCellWrapper, { width: DAY_COL_WIDTH }]}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.weekHeaderCell,
+                                                isSel && styles.weekHeaderCellSelected,
+                                                isToday && !isSel && styles.weekHeaderCellToday,
+                                            ]}
+                                            onPress={() => handleSelectDate(day.dateStr)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={[styles.weekDayName, isSel && styles.weekDayNameSelected]}>
+                                                {day.dayName.substring(0, 3)}
+                                            </Text>
+                                            <Text style={[styles.weekDayNum, isSel && styles.weekDayNumSelected]}>
+                                                {day.dayNum}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    </ScrollView>
                 </View>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.weeklyGridBody}>
-                        <View style={styles.weeklyTimeColumn}>
+                {/* 24-Hour Vertically Scrollable Body with Sticky Left Time Column */}
+                <ScrollView
+                    ref={weekVerticalScrollRef}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.weekVerticalContent}
+                    contentOffset={{ x: 0, y: DEFAULT_START_HOUR * HOUR_HEIGHT }}
+                >
+                    <View style={[styles.weekBodyRow, { height: TOTAL_HOURS * HOUR_HEIGHT }]}>
+                        {/* Pinned Left Time Column */}
+                        <View style={[styles.weeklyTimeColumn, { width: TIME_COL_WIDTH }]}>
                             {hours.map((h) => (
-                                <View key={h} style={styles.weeklyTimeCell}>
+                                <View key={h} style={[styles.weeklyTimeCell, { height: HOUR_HEIGHT }]}>
                                     <Text style={styles.weeklyTimeText}>
                                         {String(h).padStart(2, '0')}:00
                                     </Text>
@@ -382,60 +512,86 @@ export default function CalendarScreen({ navigation }) {
                             ))}
                         </View>
 
-                        {weekDays.map((day) => {
-                            const dayActs = monthActivities[day.dateStr] || [];
-                            const isSel = day.dateStr === selectedDate;
-                            return (
-                                <View
-                                    key={day.dateStr}
-                                    style={[
-                                        styles.weeklyDayColumn,
-                                        isSel && styles.weeklyDayColumnSelected,
-                                    ]}
-                                >
-                                    {hours.map((h) => (
-                                        <View key={h} style={styles.weeklyGridHourCell} />
-                                    ))}
+                        {/* Horizontally Scrollable 7-Day Grid */}
+                        <ScrollView
+                            ref={gridScrollRef}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            scrollEventThrottle={16}
+                            onScroll={(e) => {
+                                const xOffset = e.nativeEvent.contentOffset.x;
+                                headerScrollRef.current?.scrollTo({ x: xOffset, animated: false });
+                            }}
+                        >
+                            <View style={styles.weekGridTrack}>
+                                {weekDays.map((day) => {
+                                    const dayActs = monthActivities[day.dateStr] || [];
+                                    const isSel = day.dateStr === selectedDate;
+                                    const laidOutActs = layoutDayActivities(dayActs);
 
-                                    {dayActs.map((act) => {
-                                        const startMins = parseTimeToMinutes(act.startTime);
-                                        const endMins = parseTimeToMinutes(act.endTime);
-                                        const gridStart = 7 * 60;
-                                        const topOffset = Math.max(0, startMins - gridStart);
-                                        const actHeight = Math.max(30, endMins - startMins);
-                                        const cat = CATEGORY_MAP[act.category] || CATEGORY_MAP.other;
+                                    return (
+                                        <View
+                                            key={day.dateStr}
+                                            style={[
+                                                styles.weeklyDayColumn,
+                                                { width: DAY_COL_WIDTH },
+                                                isSel && styles.weeklyDayColumnSelected,
+                                            ]}
+                                        >
+                                            {hours.map((h) => (
+                                                <View key={h} style={[styles.weeklyGridHourCell, { height: HOUR_HEIGHT }]} />
+                                            ))}
 
-                                        return (
-                                            <TouchableOpacity
-                                                key={act.id}
-                                                style={[
-                                                    styles.weeklyActivityBlock,
-                                                    {
-                                                        top: topOffset,
-                                                        height: actHeight,
-                                                        backgroundColor: `${cat.color}20`,
-                                                        borderColor: cat.color,
-                                                    },
-                                                ]}
-                                                onPress={() => {
-                                                    setEditingActivity(act);
-                                                    setIsModalVisible(true);
-                                                }}
-                                            >
-                                                <Text style={[styles.weeklyActivityTitle, { color: cat.color }]} numberOfLines={1}>
-                                                    {act.title}
-                                                </Text>
-                                                {actHeight >= 40 && (
-                                                    <Text style={styles.weeklyActivityTime} numberOfLines={1}>
-                                                        {act.startTime}
-                                                    </Text>
-                                                )}
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            );
-                        })}
+                                            {laidOutActs.map(({ act, colIndex, numCols }) => {
+                                                const startMins = parseTimeToMinutes(act.startTime);
+                                                const endMins = parseTimeToMinutes(act.endTime);
+                                                const topOffset = (startMins / 60) * HOUR_HEIGHT;
+                                                const durationMins = Math.max(15, endMins - startMins);
+                                                const actHeight = Math.max(26, (durationMins / 60) * HOUR_HEIGHT - 2);
+                                                const cat = CATEGORY_MAP[act.category] || CATEGORY_MAP.other;
+
+                                                const colWidthPercent = 100 / numCols;
+                                                const leftPercent = colIndex * colWidthPercent;
+
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={act.id}
+                                                        style={[
+                                                            styles.weeklyActivityBlock,
+                                                            {
+                                                                top: topOffset,
+                                                                height: actHeight,
+                                                                left: `${leftPercent + 1}%`,
+                                                                width: `${colWidthPercent - 2}%`,
+                                                                backgroundColor: `${cat.color}22`,
+                                                                borderColor: cat.color,
+                                                            },
+                                                        ]}
+                                                        onPress={() => {
+                                                            setEditingActivity(act);
+                                                            setIsModalVisible(true);
+                                                        }}
+                                                        activeOpacity={0.85}
+                                                    >
+                                                        <Text
+                                                            style={[styles.weeklyActivityTitle, { color: cat.color }]}
+                                                            numberOfLines={1}
+                                                        >
+                                                            {act.title}
+                                                        </Text>
+                                                        {actHeight >= 36 && (
+                                                            <Text style={styles.weeklyActivityTime} numberOfLines={1}>
+                                                                {act.startTime}
+                                                            </Text>
+                                                        )}
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    );
+                                })}
+                            </View>
+                        </ScrollView>
                     </View>
                 </ScrollView>
             </View>
@@ -443,7 +599,7 @@ export default function CalendarScreen({ navigation }) {
     };
 
     const renderDayView = () => {
-        const hours = Array.from({ length: 15 }, (_, i) => i + 7); // 07:00 to 21:00
+        const laidOutActs = layoutDayActivities(activeDateActivities);
 
         return (
             <View style={styles.dayViewContainer}>
@@ -462,11 +618,17 @@ export default function CalendarScreen({ navigation }) {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.dayScrollContent}>
-                    <View style={styles.dayGridBody}>
-                        <View style={styles.dayTimeColumn}>
+                {/* 24-Hour Vertically Scrollable Day Timeline */}
+                <ScrollView
+                    ref={dayScrollRef}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.dayScrollContent}
+                    contentOffset={{ x: 0, y: DEFAULT_START_HOUR * HOUR_HEIGHT }}
+                >
+                    <View style={[styles.dayGridBody, { height: TOTAL_HOURS * HOUR_HEIGHT }]}>
+                        <View style={[styles.dayTimeColumn, { width: TIME_COL_WIDTH }]}>
                             {hours.map((h) => (
-                                <View key={h} style={styles.dayTimeCell}>
+                                <View key={h} style={[styles.dayTimeCell, { height: HOUR_HEIGHT }]}>
                                     <Text style={styles.dayTimeText}>
                                         {String(h).padStart(2, '0')}:00
                                     </Text>
@@ -476,16 +638,19 @@ export default function CalendarScreen({ navigation }) {
 
                         <View style={styles.dayColumnSpace}>
                             {hours.map((h) => (
-                                <View key={h} style={styles.dayGridHourCell} />
+                                <View key={h} style={[styles.dayGridHourCell, { height: HOUR_HEIGHT }]} />
                             ))}
 
-                            {activeDateActivities.map((act) => {
+                            {laidOutActs.map(({ act, colIndex, numCols }) => {
                                 const startMins = parseTimeToMinutes(act.startTime);
                                 const endMins = parseTimeToMinutes(act.endTime);
-                                const gridStart = 7 * 60;
-                                const topOffset = Math.max(0, startMins - gridStart);
-                                const actHeight = Math.max(45, endMins - startMins);
+                                const topOffset = (startMins / 60) * HOUR_HEIGHT;
+                                const durationMins = Math.max(15, endMins - startMins);
+                                const actHeight = Math.max(40, (durationMins / 60) * HOUR_HEIGHT - 2);
                                 const cat = CATEGORY_MAP[act.category] || CATEGORY_MAP.other;
+
+                                const colWidthPercent = 100 / numCols;
+                                const leftPercent = colIndex * colWidthPercent;
 
                                 return (
                                     <TouchableOpacity
@@ -495,6 +660,8 @@ export default function CalendarScreen({ navigation }) {
                                             {
                                                 top: topOffset,
                                                 height: actHeight,
+                                                left: `${leftPercent + 1}%`,
+                                                width: `${colWidthPercent - 2}%`,
                                                 backgroundColor: `${cat.color}20`,
                                                 borderColor: cat.color,
                                             },
@@ -503,16 +670,22 @@ export default function CalendarScreen({ navigation }) {
                                             setEditingActivity(act);
                                             setIsModalVisible(true);
                                         }}
+                                        activeOpacity={0.85}
                                     >
                                         <View style={[styles.dayActivityLeftAccent, { backgroundColor: cat.color }]}>
-                                            <AppIcon name={cat.icon} size={moderateScale(15)} color="#0B0E14" strokeWidth={2.4} />
+                                            <AppIcon
+                                                name={cat.icon}
+                                                size={moderateScale(numCols >= 3 ? 12 : 14)}
+                                                color="#0B0E14"
+                                                strokeWidth={2.4}
+                                            />
                                         </View>
                                         <View style={styles.dayActivityInfo}>
                                             <Text style={styles.dayActivityTitle} numberOfLines={1}>
                                                 {act.title}
                                             </Text>
                                             <Text style={styles.dayActivityTime} numberOfLines={1}>
-                                                {act.startTime} - {act.endTime} ({formatDuration(endMins - startMins)})
+                                                {act.startTime} – {act.endTime} ({formatDuration(endMins - startMins)})
                                             </Text>
                                         </View>
                                     </TouchableOpacity>
@@ -528,16 +701,7 @@ export default function CalendarScreen({ navigation }) {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                    activeOpacity={0.8}
-                >
-                    <AppIcon name="arrow-left" size={moderateScale(14)} color={COLORS.primary} strokeWidth={2.4} />
-                    <Text style={styles.backButtonText}>Dashboard</Text>
-                </TouchableOpacity>
                 <Text style={styles.headerTitle}>Planner</Text>
-                <View style={styles.headerPlaceholder} />
             </View>
 
             <View style={styles.tabContainer}>
@@ -596,7 +760,7 @@ const styles = ScaledSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         paddingHorizontal: '16@ms',
         paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 30),
         paddingBottom: '16@ms',
@@ -604,30 +768,11 @@ const styles = ScaledSheet.create({
         borderColor: COLORS.border,
         backgroundColor: COLORS.background,
     },
-    backButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: '6@ms',
-        paddingVertical: '8@ms',
-        paddingHorizontal: '14@ms',
-        borderRadius: '20@ms',
-        backgroundColor: COLORS.card,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    backButtonText: {
-        color: COLORS.primary,
-        fontSize: '13@ms',
-        fontWeight: '700',
-    },
     headerTitle: {
         color: COLORS.text,
         fontSize: '18@ms',
         fontWeight: '800',
         letterSpacing: 0.3,
-    },
-    headerPlaceholder: {
-        width: '80@s',
     },
     tabContainer: {
         flexDirection: 'row',
@@ -755,31 +900,6 @@ const styles = ScaledSheet.create({
     activityDotSelected: {
         backgroundColor: '#0B0E14',
     },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: '10@ms',
-        marginBottom: '15@ms',
-    },
-    sectionTitle: {
-        color: COLORS.text,
-        fontSize: '16@ms',
-        fontWeight: '800',
-    },
-    headerAddButton: {
-        backgroundColor: COLORS.card,
-        paddingVertical: '6@ms',
-        paddingHorizontal: '12@ms',
-        borderRadius: '8@ms',
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    headerAddButtonText: {
-        color: COLORS.primary,
-        fontSize: '12@ms',
-        fontWeight: '700',
-    },
     emptyCard: {
         backgroundColor: COLORS.card,
         borderRadius: '20@ms',
@@ -868,24 +988,38 @@ const styles = ScaledSheet.create({
         marginTop: '4@ms',
         marginLeft: '38@ms',
     },
+
+    // Week View Styles
     weekViewContainer: {
         flex: 1,
     },
-    weekHeaderRow: {
+    weekHeaderContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
-        paddingVertical: '10@ms',
         backgroundColor: COLORS.card,
         borderBottomWidth: 1,
         borderColor: COLORS.border,
-        marginBottom: '8@ms',
+    },
+    weekTimeHeaderCorner: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRightWidth: 1,
+        borderColor: COLORS.border,
+        backgroundColor: COLORS.card,
+    },
+    weekHeaderTrack: {
+        flexDirection: 'row',
+    },
+    weekHeaderCellWrapper: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: '6@ms',
     },
     weekHeaderCell: {
         alignItems: 'center',
-        paddingVertical: '8@ms',
-        paddingHorizontal: '10@ms',
-        borderRadius: '14@ms',
-        width: '46@s',
+        justifyContent: 'center',
+        paddingVertical: '6@ms',
+        width: '84%',
+        borderRadius: '12@ms',
     },
     weekHeaderCellSelected: {
         backgroundColor: COLORS.primary,
@@ -907,56 +1041,57 @@ const styles = ScaledSheet.create({
         color: COLORS.text,
         fontSize: '14@ms',
         fontWeight: '800',
-        marginTop: '4@ms',
+        marginTop: '2@ms',
     },
     weekDayNumSelected: {
         color: '#0B0E14',
         fontWeight: '900',
     },
-    weeklyGridBody: {
+    weekVerticalContent: {
+        paddingBottom: '40@ms',
+    },
+    weekBodyRow: {
         flexDirection: 'row',
-        paddingRight: '20@ms',
-        height: '920@vs',
     },
     weeklyTimeColumn: {
-        width: '55@s',
-        backgroundColor: COLORS.background,
         borderRightWidth: 1,
         borderColor: COLORS.border,
-        paddingTop: '10@ms',
+        backgroundColor: COLORS.background,
     },
     weeklyTimeCell: {
-        height: '60@vs',
         justifyContent: 'flex-start',
         alignItems: 'center',
+        paddingTop: '4@ms',
     },
     weeklyTimeText: {
         color: COLORS.textMuted,
         fontSize: '11@ms',
         fontWeight: '700',
     },
+    weekGridTrack: {
+        flexDirection: 'row',
+    },
     weeklyDayColumn: {
-        width: '105@s',
         position: 'relative',
         borderRightWidth: 1,
         borderColor: COLORS.border,
+        overflow: 'hidden',
     },
     weeklyDayColumnSelected: {
         backgroundColor: 'rgba(6, 182, 212, 0.05)',
     },
     weeklyGridHourCell: {
-        height: '60@vs',
         borderBottomWidth: 1,
         borderColor: COLORS.border,
     },
     weeklyActivityBlock: {
         position: 'absolute',
-        left: 4,
-        right: 4,
         borderRadius: '8@ms',
         borderLeftWidth: 3,
-        padding: '4@ms',
+        paddingHorizontal: '4@ms',
+        paddingVertical: '2@ms',
         justifyContent: 'flex-start',
+        borderWidth: 1,
         overflow: 'hidden',
     },
     weeklyActivityTitle: {
@@ -964,10 +1099,12 @@ const styles = ScaledSheet.create({
         fontWeight: '800',
     },
     weeklyActivityTime: {
-        fontSize: '8@ms',
+        fontSize: '8.5@ms',
         color: COLORS.textMuted,
-        marginTop: '2@ms',
+        marginTop: '1@ms',
     },
+
+    // Day View Styles
     dayViewContainer: {
         flex: 1,
     },
@@ -997,20 +1134,21 @@ const styles = ScaledSheet.create({
         fontSize: '12@ms',
         fontWeight: '800',
     },
+    dayScrollContent: {
+        paddingBottom: '40@ms',
+    },
     dayGridBody: {
         flexDirection: 'row',
-        height: '920@vs',
     },
     dayTimeColumn: {
-        width: '60@s',
         borderRightWidth: 1,
         borderColor: COLORS.border,
-        paddingTop: '10@ms',
+        backgroundColor: COLORS.background,
     },
     dayTimeCell: {
-        height: '60@vs',
         justifyContent: 'flex-start',
         alignItems: 'center',
+        paddingTop: '4@ms',
     },
     dayTimeText: {
         color: COLORS.textMuted,
@@ -1022,34 +1160,31 @@ const styles = ScaledSheet.create({
         position: 'relative',
     },
     dayGridHourCell: {
-        height: '60@vs',
         borderBottomWidth: 1,
         borderColor: COLORS.border,
     },
     dayActivityBlock: {
         position: 'absolute',
-        left: 10,
-        right: 10,
-        borderRadius: '12@ms',
+        borderRadius: '10@ms',
         borderLeftWidth: 4,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingRight: '10@ms',
-        paddingVertical: '6@ms',
+        paddingRight: '6@ms',
+        paddingVertical: '4@ms',
         borderWidth: 1,
-        borderColor: COLORS.border,
+        overflow: 'hidden',
     },
     dayActivityLeftAccent: {
-        width: '32@ms',
-        height: '32@ms',
+        width: '28@ms',
+        height: '28@ms',
         borderRadius: '8@ms',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: '8@ms',
+        marginLeft: '6@ms',
     },
     dayActivityInfo: {
         flex: 1,
-        marginLeft: '10@ms',
+        marginLeft: '8@ms',
         justifyContent: 'center',
     },
     dayActivityTitle: {
@@ -1062,8 +1197,5 @@ const styles = ScaledSheet.create({
         fontSize: '11@ms',
         fontWeight: '600',
         marginTop: '2@ms',
-    },
-    dayScrollContent: {
-        paddingBottom: '50@ms',
     },
 });

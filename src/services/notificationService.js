@@ -11,7 +11,7 @@ import {
     onTokenRefresh,
     AuthorizationStatus,
 } from '@react-native-firebase/messaging';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from '@react-native-firebase/firestore';
 import { auth, db } from './firebase';
 
 // Helper to convert time HH:MM to hours and minutes
