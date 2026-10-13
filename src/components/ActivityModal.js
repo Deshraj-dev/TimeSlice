@@ -34,8 +34,10 @@ export default function ActivityModal({
     selectedDate,
     existingActivities = [],
     onSaveSuccess,
+    onActivitySaved,
 }) {
     const [title, setTitle] = useState('');
+    const [isCustomTitle, setIsCustomTitle] = useState(false);
     const [category, setCategory] = useState('work');
     const [date, setDate] = useState('');
     const [startTime, setStartTime] = useState('');
@@ -51,6 +53,7 @@ export default function ActivityModal({
             setStartTime(activity.startTime || '');
             setEndTime(activity.endTime || '');
             setNotes(activity.notes || '');
+            setIsCustomTitle(true);
         } else {
             setTitle('');
             setCategory('work');
@@ -58,6 +61,7 @@ export default function ActivityModal({
             setStartTime('');
             setEndTime('');
             setNotes('');
+            setIsCustomTitle(false);
         }
     }, [activity, selectedDate, visible]);
 
@@ -83,8 +87,28 @@ export default function ActivityModal({
         }
     };
 
-    const validateInputs = () => {
-        if (!title.trim()) {
+    const handleTitleChange = (text) => {
+        setTitle(text);
+        setIsCustomTitle(text.trim().length > 0);
+    };
+
+    const handleCategorySelect = (selectedCat) => {
+        setCategory(selectedCat.id);
+        if (!isCustomTitle || !title.trim()) {
+            setTitle(selectedCat.label);
+            setIsCustomTitle(false);
+        }
+    };
+
+    const getEffectiveTitle = () => {
+        const trimmed = title.trim();
+        if (trimmed) return trimmed;
+        const currentCat = CATEGORIES.find((cat) => cat.id === category);
+        return currentCat ? currentCat.label : '';
+    };
+
+    const validateInputs = (effectiveTitle) => {
+        if (!effectiveTitle) {
             Alert.alert('Validation Error', 'Please enter an activity name.');
             return false;
         }
@@ -135,7 +159,12 @@ export default function ActivityModal({
     };
 
     const handleSave = async () => {
-        if (!validateInputs()) return;
+        const effectiveTitle = getEffectiveTitle();
+        if (!validateInputs(effectiveTitle)) return;
+
+        if (!title.trim() && effectiveTitle) {
+            setTitle(effectiveTitle);
+        }
 
         setLoading(true);
         try {
@@ -153,7 +182,7 @@ export default function ActivityModal({
             }
 
             const data = {
-                title: title.trim(),
+                title: effectiveTitle,
                 category,
                 date,
                 startTime,
@@ -190,6 +219,7 @@ export default function ActivityModal({
             }
 
             if (onSaveSuccess) onSaveSuccess();
+            if (onActivitySaved) onActivitySaved();
             onClose();
         } catch (error) {
             Alert.alert('Database Error', error.message);
@@ -260,7 +290,7 @@ export default function ActivityModal({
                             placeholder="Study, Work, Exercise..."
                             placeholderTextColor="#64748B"
                             value={title}
-                            onChangeText={setTitle}
+                            onChangeText={handleTitleChange}
                             style={styles.input}
                         />
 
@@ -279,7 +309,7 @@ export default function ActivityModal({
                                                 borderColor: cat.color,
                                             },
                                         ]}
-                                        onPress={() => setCategory(cat.id)}
+                                        onPress={() => handleCategorySelect(cat)}
                                     >
                                         <AppIcon
                                             name={cat.icon}
