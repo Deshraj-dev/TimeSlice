@@ -25,13 +25,24 @@ TimeSlice is a mobile application project designed to help users organize and ma
 
 ## Screenshots
 
-Add real screenshots of the application here.
+### Home Screen
+![TimeSlice Home Screen](Screenshot_1790405492.png)
 
-Suggested screenshots:
-- Home Screen
-- Add Activity Screen
-- Profile Screen
-- Map Interface
+### Focus Screen
+![TimeSlice Focus Screen](Screenshot_1790405626.png)
+
+### Planner Screen
+![TimeSlice Planner Screen](Screenshot_1790405656.png)
+
+### Statistics Screen
+![TimeSlice Statistics Screen](Screenshot_1790405708.png)
+
+### Badges Screen
+![TimeSlice Badges Screen](Screenshot_1790405713.png)
+
+### Additional Screen
+![TimeSlice Additional Screen](Screenshot_1790405723.png)
+
 
 ## Getting Started
 
